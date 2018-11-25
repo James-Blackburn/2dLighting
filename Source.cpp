@@ -28,16 +28,6 @@ struct Player{
     float angle = 0;
 };
 
-struct Chunk{
-    std::vector<Tile*> tiles;
-    int x,y;
-    void calculatePosition(){
-        Tile* middleTile = tiles[static_cast<int>(tiles.size()/2)];
-        this->x = middleTile->x;
-        this->y = middleTile->y;
-    }
-};
-
 
 class Game{
     private:
@@ -50,7 +40,6 @@ class Game{
         static const int FPS = 60;
 
         std::vector<Tile*> tiles = std::vector<Tile*>(TILE_NUM);
-        std::vector<Chunk*> chunks;
         std::vector<Zombie*> zombies;
         Player* player = new Player;
         sf::Color woodColour;

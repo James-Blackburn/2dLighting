@@ -3,20 +3,13 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-
-/*
-Copyright James Blackburn
-10/09/2018
-distributed under the GNU liscense
-*/
+#define PI 3.14159265359
 
 struct Tile{
     int x;
     int y;
-	// isOn defines if the sprite should be displayed to
-	// the screen or not
-    int isOn;
-    int brightness;
+    int isOn = 1;
+    int brightness = 255;
 };
 
 struct Zombie{
@@ -24,37 +17,45 @@ struct Zombie{
     int y;
     int isOn;
     int brightness;
-	// angle reffers to the sprite angle 
-	// in relation to the player
     float angle;
 };
 
 struct Player{
-    int x;
-    int y;
+    int x,y;
     int move_x = 0;
     int move_y = 0;
     int speed = 2;
+    float angle = 0;
+};
+
+struct Chunk{
+    std::vector<Tile*> tiles;
+    int x,y;
+    void calculatePosition(){
+        Tile* middleTile = tiles[static_cast<int>(tiles.size()/2)];
+        this->x = middleTile->x;
+        this->y = middleTile->y;
+    }
 };
 
 
 class Game{
     private:
-		// declaring class members
         sf::RenderWindow window;
-        const int WINDOW_X = 1280;
-        const int WINDOW_Y = 720;
-        const int BLOCK_SIZE = 8;
-        const int FONT_SIZE = 20;
-        const int TILE_NUM = (WINDOW_X/BLOCK_SIZE)*(WINDOW_Y/BLOCK_SIZE);
-        std::vector<Tile> tiles = std::vector<Tile>(TILE_NUM);
-		// Not defining size of the vector zombies, as the size will be dynamic
-        std::vector<Zombie> zombies;
+        static const int WINDOW_X = 1920;
+        static const int WINDOW_Y = 1080;
+        static const int BLOCK_SIZE = 8;
+        static const int FONT_SIZE = 20;
+        static const int TILE_NUM = (WINDOW_X/BLOCK_SIZE)*(WINDOW_Y/BLOCK_SIZE);
+        static const int FPS = 60;
+
+        std::vector<Tile*> tiles = std::vector<Tile*>(TILE_NUM);
+        std::vector<Chunk*> chunks;
+        std::vector<Zombie*> zombies;
+        Player* player = new Player;
         sf::Color woodColour;
         sf::Color zombieColour;
 
-		// Textures are class members so that they do not 
-		// Go out of range, and be destroyed
         sf::Texture woodTexture;
         sf::Texture playerTexture;
         sf::Texture zombieTexture;
@@ -68,7 +69,7 @@ class Game{
         sf::Clock clock;
         sf::Text text;
         sf::Font font;
-        Player player;
+
 
         void loadFiles(){
             // This method loads and applies the textures to their corresponding sprites
@@ -107,33 +108,28 @@ class Game{
                     x = 0;
                     y += BLOCK_SIZE;
                 }
-                Tile newTile;
-                newTile.x = x;
-                newTile.y = y;
+                Tile* newTile = new Tile;
+                newTile->x = x;
+                newTile->y = y;
                 tiles[i] = newTile;
-				
-                if (!(rand()%256)){
-                    Zombie newZomb;
-                    newZomb.x = x;
-                    newZomb.y = y;
+
+                if (!(rand()%512)){
+                    Zombie* newZomb = new Zombie;
+                    newZomb->x = x;
+                    newZomb->y = y;
                     zombies.push_back(newZomb);
                 }
 
                 x += BLOCK_SIZE;
             }
-            player.x = WINDOW_X/2;
-            player.y = WINDOW_Y/2;
+            player->x = WINDOW_X/2;
+            player->y = WINDOW_Y/2;
         }
 
         void getFps(){
-			// This method updates the text for the fps counter
             double currentTime = clock.restart().asSeconds();
             int fps = (1.f / currentTime);
-
-            char c[10];
-            std::sprintf(c, "%d", fps);
-            std::string string(c);
-            sf::String str(string);
+            std::string str = std::to_string(fps);
             text.setString("FPS: "+str);
         }
 
@@ -153,47 +149,49 @@ class Game{
             while (window.pollEvent(event)){
                 if (event.type == sf::Event::Closed){
                     // Window Closed
+                    for (Zombie* zomb : zombies) delete zomb;
+                    for (Tile* tile : tiles) delete tile;
                     window.close();
                 } else if (event.type == sf::Event::KeyPressed){
                     // Key Pressed
                     if (event.key.code == sf::Keyboard::Escape){
                         window.close();
                     } else if (event.key.code == sf::Keyboard::W){
-                        player.move_y = -player.speed;
+                        player->angle = 0;
+                        player->move_y = -player->speed;
                     } else if (event.key.code == sf::Keyboard::S){
-                        player.move_y = player.speed;
+                        player->angle = 180;
+                        player->move_y = player->speed;
                     } else if (event.key.code == sf::Keyboard::A){
-                        player.move_x = -player.speed;
+                        player->angle = -90;
+                        player->move_x = -player->speed;
                     } else if(event.key.code == sf::Keyboard::D){
-                        player.move_x = player.speed;
+                        player->angle = 90;
+                        player->move_x = player->speed;
                     }
                 } else if (event.type == sf::Event::KeyReleased){
                     // Key Released
-                    player.move_x = 0;
-                    player.move_y = 0;
+                    player->move_x = 0;
+                    player->move_y = 0;
                 }
             }
         }
 
-		// Using templates as the value passed through the method will
-		// not always be the same.
         template <class T>
         void applyLighting(T &vect){
-			// This method changes how dark or light a sprite is
-			// depending on the distance from the player
-			// thus giving the illusion of a dynamic light source
             for (int i=0; i<vect.size(); i++){
-                vect[i].isOn = 1;
-                double dist_y = vect[i].y-player.y;
-                double dist_x = vect[i].x-player.x;
+                auto* object = vect[i];
+                object->isOn = 1;
+                double dist_y = object->y-player->y;
+                double dist_x = object->x-player->x;
                 double distance = (int)sqrt((dist_x*dist_x)+(dist_y*dist_y))/8;
                 if (distance > 16){
-                    vect[i].isOn = 0;
+                    object->isOn = 0;
                 } else{
                     if (distance == 16){
-                        vect[i].brightness = 255-(distance*BLOCK_SIZE*2)+1;
+                        object->brightness = 255-(distance*BLOCK_SIZE*2)+1;
                     } else{
-                        vect[i].brightness = 255-(distance*BLOCK_SIZE*2);
+                        object->brightness = 255-(distance*BLOCK_SIZE*2);
                     }
                 }
             }
@@ -202,28 +200,28 @@ class Game{
         void updateZombies(){
             // This method updates zombies
             // It rotates and moves them towards the player
-            for (int i=0; i<zombies.size(); i++){
+            for (Zombie* zombie : zombies){
                 //Rotate zombie
-                float adjacent = zombies[i].x - player.x;
-                float opposite = zombies[i].y - player.y;
-                float angle = atan2(opposite,adjacent)*180/3.14159265359;
-                zombies[i].angle = angle-90;
-                //Move the Zombie to the current position of the player
-                if (zombies[i].x < player.x){
-                    zombies[i].x += rand()%2;
-                } else if (zombies[i].x > player.x){
-                    zombies[i].x -= rand()%2;
+                float adjacent = zombie->x - player->x;
+                float opposite = zombie->y - player->y;
+                float angle = atan2(opposite,adjacent)*180/PI;
+                zombie->angle = angle-90;
+                //Move the Zombie
+                if (zombie->x < player->x){
+                    zombie->x += rand()%2;
+                } else if (zombie->x > player->x){
+                    zombie->x -= rand()%2;
                 }
 
-                if (zombies[i].y < player.y){
-                    zombies[i].y += rand()%2;
-                } else if (zombies[i].y > player.y){
-                    zombies[i].y -= rand()%2;
+                if (zombie->y < player->y){
+                    zombie->y += rand()%2;
+                } else if (zombie->y > player->y){
+                    zombie->y -= rand()%2;
                 }
 
                 if (rand()%6 == 2){
-                    zombies[i].x += (-2+(rand()%5));
-                    zombies[i].y += (-2+(rand()%5));
+                    zombie->x += (-2+(rand()%5));
+                    zombie->y += (-2+(rand()%5));
                 }
 
             }
@@ -234,51 +232,49 @@ class Game{
             updateZombies();
             applyLighting(tiles);
             applyLighting(zombies);
-            player.x += player.move_x;
-            player.y += player.move_y;
-            if (player.x > WINDOW_X) player.x = WINDOW_X;
-            else if (player.x < 0) player.x = 0;
-            if (player.y > WINDOW_Y) player.y = WINDOW_Y;
-            else if (player.y < 0) player.y = 0;
+            player->x += player->move_x;
+            player->y += player->move_y;
+            if (player->x > WINDOW_X) player->x = WINDOW_X;
+            else if (player->x < 0) player->x = 0;
+            if (player->y > WINDOW_Y) player->y = WINDOW_Y;
+            else if (player->y < 0) player->y = 0;
         }
 
         void display(){
-			// This method displays all sprites to the screen
-			// dirty rects may be utilised in the future to 
-			// only update the sprites that have changed - increasing performance
             window.clear();
-            for (int i=0; i<tiles.size(); i++){
-                if (tiles[i].isOn){
-                    woodSprite.setPosition(tiles[i].x,tiles[i].y);
-                    woodSprite.setColor(sf::Color(tiles[i].brightness
-                                                  ,tiles[i].brightness
-                                                  ,tiles[i].brightness));
+            for (Tile* tile : tiles){
+                if (tile->isOn){
+                    woodSprite.setPosition(tile->x,tile->y);
+                    woodSprite.setColor(sf::Color(tile->brightness
+                                                  ,tile->brightness
+                                                  ,tile->brightness));
                     window.draw(woodSprite);
                 }
             }
 
-            for (int i=0; i<zombies.size(); i++){
-                if (zombies[i].isOn){
-                    zombieSprite.setPosition(zombies[i].x,zombies[i].y);
-                    zombieShadowSprite.setPosition(zombies[i].x-5,zombies[i].y-5);
-                    zombieSprite.setRotation(zombies[i].angle);
-                    zombieShadowSprite.setRotation(zombies[i].angle);
-                    zombieSprite.setColor(sf::Color(zombies[i].brightness
-                                                    ,zombies[i].brightness
-                                                    ,zombies[i].brightness));
+            for (Zombie* zombie : zombies){
+                if (zombie->isOn){
+                    zombieSprite.setPosition(zombie->x,zombie->y);
+                    zombieShadowSprite.setPosition(zombie->x-5,zombie->y-5);
+                    zombieSprite.setRotation(zombie->angle);
+                    zombieShadowSprite.setRotation(zombie->angle);
+                    zombieSprite.setColor(sf::Color(zombie->brightness
+                                                    ,zombie->brightness
+                                                    ,zombie->brightness));
                     window.draw(zombieShadowSprite);
                     window.draw(zombieSprite);
                 }
             }
-            playerSprite.setPosition(player.x,player.y);
+            playerSprite.setRotation(player->angle);
+            playerSprite.setPosition(player->x,player->y);
             window.draw(playerSprite);
             window.draw(text);
             window.display();
         }
     public:
-        Game() : window(sf::VideoMode(1280,720),"Lighting Test"){
-			//Constructor for the game class
-            window.setFramerateLimit(60);
+        Game() : window(sf::VideoMode(WINDOW_X,WINDOW_Y),"Lighting Test"){
+            window.setFramerateLimit(FPS);
+            window.setVerticalSyncEnabled(true);
             loadFiles();
             initLevel();
             frame();

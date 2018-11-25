@@ -1,7 +1,7 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <cmath>
-#include <cstdlib>
+#include <random>
 #include <iostream>
 #define PI 3.14159265359
 
